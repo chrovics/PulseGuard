@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: pulseguard_db
+    restart: always
+    environment:
+      POSTGRES_USER: pulseguard_user
+      POSTGRES_PASSWORD: supersecretpassword
+      POSTGRES_DB: pulseguard
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulseguard_user -d pulseguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: pulseguard_api
+    restart: always
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://pulseguard_user:supersecretpassword@db:5432/pulseguard
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: .
+    container_name: pulseguard_worker
+    restart: always
+    command: python -m app.worker
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://pulseguard_user:supersecretpassword@db:5432/pulseguard
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

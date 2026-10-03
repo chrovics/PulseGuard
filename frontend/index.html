@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ro" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PulseGuard Pro Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen p-6">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <h1 class="text-3xl font-bold mb-8 flex items-center gap-3 border-b border-gray-700 pb-4">
+            <span class="text-blue-500">📡</span> PulseGuard <span class="text-gray-400 font-light">Pro</span>
+        </h1>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Coloana Stângă: Control & Listă -->
+            <div class="lg:col-span-1 space-y-6">
+                
+                <!-- Card: Adaugă Site -->
+                <div class="bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-700">
+                    <h2 class="text-md font-semibold mb-3 text-gray-300">Adaugă Țintă Nouă</h2>
+                    <form id="addMonitorForm" onsubmit="addMonitor(event)" class="space-y-3">
+                        <input type="url" id="newUrl" required placeholder="https://exemplu.ro" 
+                               class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <input type="text" id="newName" required placeholder="Nume (ex: Blog Personal)" 
+                               class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <button type="submit" 
+                                class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm">
+                            + Adaugă în Monitorizare
+                        </button>
+                    </form>
+                    <p id="formStatus" class="mt-2 text-xs hidden"></p>
+                </div>
+
+                <!-- Card: Lista de Site-uri -->
+                <div class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden">
+                    <div class="p-4 border-b border-gray-700 bg-gray-800/50">
+                        <h2 class="text-md font-semibold text-gray-300">Monitoare Active</h2>
+                    </div>
+                    <div id="monitorsList" class="divide-y divide-gray-700 max-h-[400px] overflow-y-auto">
+                        <!-- Site-urile vor fi generate aici din JavaScript -->
+                        <div class="p-4 text-sm text-gray-500 text-center">Se încarcă...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coloana Dreaptă: Analiză & Grafic -->
+            <div class="lg:col-span-2">
+                <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 h-full">
+                    
+                    <!-- Header Grafic -->
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                        <div>
+                            <h2 class="text-2xl font-bold text-white" id="monitorName">Selectează un site</h2>
+                            <a href="#" target="_blank" class="text-sm text-blue-400 hover:underline" id="monitorUrl">...</a>
+                            
+                            <div class="mt-3 flex gap-3">
+                                <span id="sslStatus" class="text-xs px-3 py-1 bg-gray-700 text-gray-300 rounded-full border border-gray-600 font-medium">
+                                    🔒 Așteptare date...
+                                </span>
+                                <span id="latencyBadge" class="text-xs px-3 py-1 bg-gray-700 text-gray-300 rounded-full border border-gray-600 font-medium">
+                                    ⚡ 0 ms
+                                </span>
+                            </div>
+                        </div>
+                        <div class="px-5 py-2 rounded-lg bg-gray-700 text-gray-300 font-bold text-lg" id="monitorStatus">
+                            STANDBY
+                        </div>
+                    </div>
+
+                    <!-- Canvas Grafic -->
+                    <div class="w-full h-72 relative">
+                        <canvas id="latencyChart"></canvas>
+                        <div id="emptyChartMessage" class="absolute inset-0 flex items-center justify-center text-gray-500 hidden">
+                            Nu există date pentru a afișa graficul.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let allMonitors = [];
+        let chartInstance = null;
+        let currentLoadedId = null;
+
+        // 1. Aducem site-urile și desenăm lista din stânga
+        async function fetchMonitorsList() {
+            try {
+                const response = await fetch('http://127.0.0.1:8000/monitors');
+                allMonitors = await response.json();
+                
+                const listContainer = document.getElementById('monitorsList');
+                listContainer.innerHTML = ''; 
+
+                if (allMonitors.length === 0) {
+                    listContainer.innerHTML = '<div class="p-4 text-sm text-gray-500 text-center">Niciun site adăugat.</div>';
+                    clearDashboard();
+                    return;
+                }
+
+                allMonitors.forEach(m => {
+                    const isActive = currentLoadedId === m.id;
+                    const item = document.createElement('div');
+                    item.className = `p-4 hover:bg-gray-700 cursor-pointer flex justify-between items-center transition-colors ${isActive ? 'bg-gray-700 border-l-4 border-blue-500' : 'border-l-4 border-transparent'}`;
+                    item.onclick = () => loadMonitorData(m.id);
+                    
+                    item.innerHTML = `
+                        <div class="overflow-hidden pr-2">
+                            <h3 class="font-semibold text-sm text-gray-200 truncate">${m.name}</h3>
+                            <p class="text-xs text-gray-500 truncate">${m.url}</p>
+                        </div>
+                        <button onclick="deleteMonitor(${m.id}, event)" class="p-2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors" title="Șterge Site">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    `;
+                    listContainer.appendChild(item);
+                });
+
+                // Dacă nu e niciun site încărcat în grafic, îl încărcăm pe primul
+                if (!currentLoadedId && allMonitors.length > 0) {
+                    loadMonitorData(allMonitors[0].id);
+                }
+
+            } catch (error) {
+                console.error("Eroare:", error);
+            }
+        }
+
+        // 2. Funcția de ȘTERGERE
+        async function deleteMonitor(id, event) {
+            event.stopPropagation(); // Previne click-ul de a încărca graficul când apeși pe coșul de gunoi
+            
+            if(!confirm("Ești sigur că vrei să ștergi acest site și tot istoricul lui?")) return;
+
+            try {
+                const response = await fetch(`http://127.0.0.1:8000/monitors/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    if(currentLoadedId === id) currentLoadedId = null; // Resetăm dacă ștergem site-ul curent vizualizat
+                    fetchMonitorsList(); // Reîncărcăm lista curată
+                } else {
+                    alert("Eroare la ștergerea site-ului din baza de date.");
+                }
+            } catch (error) {
+                alert("Eroare de rețea. API-ul este pornit?");
+            }
+        }
+
+        // 3. Adăugare Site
+        async function addMonitor(event) {
+            event.preventDefault();
+            const urlInput = document.getElementById('newUrl').value;
+            const nameInput = document.getElementById('newName').value;
+            const statusText = document.getElementById('formStatus');
+            
+            statusText.innerText = "Trimitere...";
+            statusText.className = "mt-2 text-xs text-yellow-400 block";
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/monitors', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: urlInput, name: nameInput, check_interval_seconds: 60, user_id: 1 })
+                });
+
+                if (response.ok) {
+                    statusText.innerText = "✅ Adăugat!";
+                    statusText.className = "mt-2 text-xs text-green-400 block";
+                    document.getElementById('addMonitorForm').reset();
+                    fetchMonitorsList(); // Refresh la listă
+                    setTimeout(() => { statusText.classList.add('hidden'); }, 3000);
+                }
+            } catch (error) {
+                statusText.innerText = "❌ Eroare rețea.";
+                statusText.className = "mt-2 text-xs text-red-400 block";
+            }
+        }
+
+        // 4. Încărcare Date pe Grafic
+        async function loadMonitorData(monitorId) {
+            currentLoadedId = monitorId;
+            fetchMonitorsList(); // Re-randăm lista ca să evidențiem elementul activ
+            
+            const currentMonitor = allMonitors.find(m => m.id === monitorId);
+            if (!currentMonitor) return;
+
+            document.getElementById('monitorName').innerText = currentMonitor.name;
+            const urlEl = document.getElementById('monitorUrl');
+            urlEl.innerText = currentMonitor.url;
+            urlEl.href = currentMonitor.url;
+            
+            // Calcul SSL
+            const sslBadge = document.getElementById('sslStatus');
+            if (currentMonitor.ssl_valid_until) {
+                const sslDate = new Date(currentMonitor.ssl_valid_until);
+                const daysLeft = Math.ceil((sslDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+                sslBadge.innerText = `🔒 SSL: ${daysLeft} zile`;
+                sslBadge.className = daysLeft < 14 ? "text-xs px-3 py-1 bg-yellow-500/20 text-yellow-500 rounded-full font-medium" : "text-xs px-3 py-1 bg-green-500/20 text-green-500 rounded-full font-medium";
+            } else {
+                sslBadge.innerText = "🔓 Fără SSL";
+                sslBadge.className = "text-xs px-3 py-1 bg-red-500/20 text-red-500 rounded-full font-medium";
+            }
+
+            try {
+                const historyResponse = await fetch(`http://127.0.0.1:8000/monitors/${monitorId}/history`);
+                const historyData = await historyResponse.json();
+                
+                const statusBadge = document.getElementById('monitorStatus');
+                const latencyBadge = document.getElementById('latencyBadge');
+                const emptyMsg = document.getElementById('emptyChartMessage');
+
+                if(historyData.length > 0) {
+                    emptyMsg.classList.add('hidden');
+                    const reversedData = historyData.reverse(); 
+                    const lastPing = reversedData[reversedData.length - 1];
+                    
+                    if (lastPing.is_up) {
+                        statusBadge.innerText = "ONLINE";
+                        statusBadge.className = "px-5 py-2 rounded-lg bg-green-500/20 text-green-400 font-bold text-lg border border-green-500/30 shadow-[0_0_15px_rgba(34,197,94,0.2)]";
+                    } else {
+                        statusBadge.innerText = "OFFLINE";
+                        statusBadge.className = "px-5 py-2 rounded-lg bg-red-500/20 text-red-400 font-bold text-lg border border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.2)]";
+                    }
+
+                    latencyBadge.innerText = `⚡ ${lastPing.response_time_ms} ms`;
+
+                    const timestamps = reversedData.map(log => new Date(log.checked_at).toLocaleTimeString('ro-RO', {hour: '2-digit', minute:'2-digit'}));
+                    const latencies = reversedData.map(log => log.response_time_ms);
+                    renderChart(timestamps, latencies, lastPing.is_up);
+                } else {
+                    emptyMsg.classList.remove('hidden');
+                    statusBadge.innerText = "AȘTEPTARE WORKER";
+                    statusBadge.className = "px-5 py-2 rounded-lg bg-gray-700 text-gray-300 font-bold text-lg";
+                    latencyBadge.innerText = `⚡ -- ms`;
+                    if(chartInstance) chartInstance.destroy();
+                }
+            } catch (error) {
+                console.error("Eroare istoric:", error);
+            }
+        }
+
+        // Curățare dashboard când nu sunt site-uri
+        function clearDashboard() {
+            document.getElementById('monitorName').innerText = "Niciun site disponibil";
+            document.getElementById('monitorUrl').innerText = "Adaugă o țintă din meniul lateral";
+            document.getElementById('monitorStatus').innerText = "STANDBY";
+            document.getElementById('monitorStatus').className = "px-5 py-2 rounded-lg bg-gray-700 text-gray-300 font-bold text-lg";
+            document.getElementById('sslStatus').innerText = "🔒 --";
+            document.getElementById('latencyBadge').innerText = "⚡ -- ms";
+            if(chartInstance) chartInstance.destroy();
+        }
+
+        // Funcția de randare grafic
+        function renderChart(labels, data, isUp) {
+            if (chartInstance) chartInstance.destroy();
+
+            const ctx = document.getElementById('latencyChart').getContext('2d');
+            
+            // Schimbăm culoarea liniei în funcție de starea serverului (roșu dacă e picat)
+            const mainColor = isUp ? '59, 130, 246' : '239, 68, 68'; 
+            
+            let gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, `rgba(${mainColor}, 0.5)`); 
+            gradient.addColorStop(1, `rgba(${mainColor}, 0)`);
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Latență (ms)',
+                        data: data,
+                        borderColor: `rgb(${mainColor})`,
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: `rgb(${mainColor})`,
+                        pointRadius: 3,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    animation: { duration: 400 },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#9ca3af' } },
+                        x: { grid: { display: false }, ticks: { color: '#9ca3af', maxTicksLimit: 10 } }
+                    },
+                    interaction: { mode: 'nearest', axis: 'x', intersect: false }
+                }
+            });
+        }
+
+        fetchMonitorsList();
+    </script>
+</body>
+</html>
