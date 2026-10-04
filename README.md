@@ -8,7 +8,7 @@
 
 > Un micro-serviciu complet pentru monitorizarea disponibilității web și a validității certificatelor SSL. 
 
-![PulseGuard Dashboard](PulseGuard.png)
+![PulseGuard](PulseGuard.jpg)
 
 Construit cu o arhitectură decuplată, proiectul rulează într-un mediu complet izolat prin containere și este expus printr-un reverse proxy securizat pe un server Linux. 
 
