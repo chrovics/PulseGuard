@@ -96,7 +96,7 @@
         // 1. Aducem site-urile și desenăm lista din stânga
         async function fetchMonitorsList() {
             try {
-                const response = await fetch('http://127.0.0.1:8000/monitors');
+                const response = await fetch('/monitors');
                 allMonitors = await response.json();
                 
                 const listContainer = document.getElementById('monitorsList');
@@ -143,7 +143,7 @@
             if(!confirm("Ești sigur că vrei să ștergi acest site și tot istoricul lui?")) return;
 
             try {
-                const response = await fetch(`http://127.0.0.1:8000/monitors/${id}`, {
+                const response = await fetch(`/monitors/${id}`, {
                     method: 'DELETE'
                 });
 
@@ -169,7 +169,7 @@
             statusText.className = "mt-2 text-xs text-yellow-400 block";
 
             try {
-                const response = await fetch('http://127.0.0.1:8000/monitors', {
+                const response = await fetch('/monitors', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: urlInput, name: nameInput, check_interval_seconds: 60, user_id: 1 })
@@ -214,7 +214,7 @@
             }
 
             try {
-                const historyResponse = await fetch(`http://127.0.0.1:8000/monitors/${monitorId}/history`);
+                const historyResponse = await fetch(`/monitors/${monitorId}/history`);
                 const historyData = await historyResponse.json();
                 
                 const statusBadge = document.getElementById('monitorStatus');
