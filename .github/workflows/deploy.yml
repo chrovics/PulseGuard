@@ -10,13 +10,19 @@ jobs:
     name: Native Deployment on VAIO
     runs-on: self-hosted
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Deploy Containers
+      - name: Deploy Production Containers
         run: |
-          echo "==> Pornire redeploy pe VAIO..."
-          docker compose down
+          echo "==> Intru în directorul de producție al aplicației..."
+          cd /home/deployer/PulseGuard
+
+          echo "==> Preluare cod nou din Git..."
+          git pull origin main
+
+          echo "==> Rebuild și pornire containere cu variabilele din .env..."
           docker compose up -d --build
+
+          echo "==> Curățare imagini vechi Docker..."
           docker image prune -f
+
+          echo "==> Verificare status containere active..."
           docker compose ps
