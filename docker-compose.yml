@@ -86,18 +86,6 @@ services:
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
 
 
-  nginx:
-    image: nginx:alpine
-    container_name: pulseguard-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro,z
-    depends_on:
-      - grafana
-      - api
-
 volumes:
   postgres_data:
   grafana_data:
