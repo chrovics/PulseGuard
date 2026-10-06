@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   db:
@@ -43,5 +42,19 @@ services:
       db:
         condition: service_healthy
 
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: pulseguard-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin # Vei schimba asta la prima logare
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - db
+
 volumes:
   postgres_data:
+  grafana_data:
